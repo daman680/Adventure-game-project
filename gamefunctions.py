@@ -174,3 +174,4 @@ for _ in range(3):
 
     print_shop_menu(item1[0], item1_price, item2[0], item2_price)
     print()
+# this is to trouble shoot some issues im having with git.
