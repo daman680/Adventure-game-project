@@ -119,59 +119,72 @@ def print_shop_menu(item1Name, item1Price, item2Name, item2Price):
     print(border_bottom)
 
 
-# Health Potion Purchases
-for i in range(3):
-    item_price = random.randint(1000, 5000)
-    starting_money = random.randint(500, 7000)
-    quantity_to_purchase = random.randint(1, 5)
+def fight_monster(player):
+    """
+    Handles a fight between the player and a randomly generated monster.
 
-    num_purchased, leftover_money = purchase_item(item_price, starting_money, quantity_to_purchase)
-    print(f"Health Potion Price: {item_price}")
-    print(f"Starting Gold: {starting_money}")
-    print(f"Potions to Buy: {quantity_to_purchase}")
-    print(f"Potions Bought: {num_purchased}")
-    print(f"Gold Left: {leftover_money}")
-    print("-" * 30)
+    Parameters:
+    - player (dict): Dictionary containing player stats, e.g., {'name': str, 'hp': int, 'gold': int}.
 
-# Monster Encounters
-print("\n=== Random Monster Encounters ===")
-for i in range(3):
+    The function runs a fight loop where the player can choose to attack or run.
+    Player HP is reduced based on monster attacks, and gold is gained if the monster is defeated.
+
+    Returns:
+    - None: Updates the player dictionary directly.
+    """
     monster = new_random_monster()
-    print(f"Monster #{i+1}: {monster['name']}")
+    print(f"\n⚔️  A wild {monster['name']} appears!")
     print(monster['description'])
-    print(f"Health: {monster['health']}")
-    print(f"Power: {monster['power']}")
-    print(f"Money: {monster['money']}")
-    print("-" * 40)
+    print(f"Health: {monster['health']}, Power: {monster['power']}, Gold: {monster['money']}")
 
-# Welcome Messages 
-print("\n=== Welcome Messages ===")
-print_welcome("Jeff", 20)
-print_welcome("Audrey", 30)
-print_welcome("Christopher", 40)
-print("-" * 40)
+    while player['hp'] > 0 and monster['health'] > 0:
+        print("\n1) Attack")
+        print("2) Run")
+        action = input("Choose your action: ").strip()
 
-# Randomized Potion Shop Menus 
-# Potion list with price ranges (min_price, max_price)
-potions = [
-    ("Health Potion", (40, 60)),
-    ("MP Potion", (30, 50)),
-    ("Strength Potion", (100, 130)),
-    ("Defense Potion", (90, 120)),
-    ("Cloaking Potion", (80, 100)),
-    ("Speed Potion", (70, 90))
-]
+        if action == "1":
+            # Simple combat: player deals random damage 5-15
+            player_damage = random.randint(5, 15)
+            monster['health'] -= player_damage
+            print(f"\nYou hit the {monster['name']} for {player_damage} damage!")
 
-print("\n=== Daman's potions shop ===")
+            if monster['health'] <= 0:
+                print(f"\nYou defeated the {monster['name']}!")
+                player['gold'] += monster['money']
+                print(f"You found {monster['money']} gold. Total gold: {player['gold']}")
+                break
 
-for _ in range(3):
-    # Pick two different potions
-    item1, item2 = random.sample(potions, 2)
+            # Monster attacks
+            monster_damage = random.randint(1, monster['power'])
+            player['hp'] -= monster_damage
+            print(f"The {monster['name']} hits you for {monster_damage} damage! Your HP: {player['hp']}")
 
-    # Generate random prices within their ranges
-    item1_price = round(random.uniform(*item1[1]), 2)
-    item2_price = round(random.uniform(*item2[1]), 2)
+        elif action == "2":
+            print(f"\nYou ran away from the {monster['name']}.")
+            break
+        else:
+            print("Unrecognized command. Please choose 1 or 2.")
 
-    print_shop_menu(item1[0], item1_price, item2[0], item2_price)
-    print()
-# this is to trouble shoot some issues im having with git.
+
+def sleep(player):
+    """
+    Restores the player's HP at the cost of gold.
+
+    Parameters:
+    - player (dict): Dictionary containing player stats, e.g., {'name': str, 'hp': int, 'gold': int}.
+
+    The function checks if the player has at least 5 gold to pay for sleep.
+    If so, restores HP to full (30) and deducts gold.
+    If not enough gold, prints a message and does not restore HP.
+
+    Returns:
+    - None: Updates the player dictionary directly.
+    """
+    cost = 5
+    if player['gold'] >= cost:
+        player['hp'] = 30
+        player['gold'] -= cost
+        print(f"\nYou slept and restored your HP to {player['hp']}. Gold remaining: {player['gold']}")
+    else:
+        print("\nNot enough gold to sleep. You need 5 gold.")
+# updated to add two new functions for game.py to use
