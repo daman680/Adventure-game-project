@@ -95,3 +95,10 @@ def print_shop_menu(item1, price1, item2, price2):
     print(f"{item1:<16}{price1:>8} gold")
     print(f"{item2:<16}{price2:>8} gold")
     print(f"{border}\n")
+ 
+def get_price(item):
+    if isinstance(item, tuple):  # potion tuple
+        return round(random.uniform(*item[1]))
+    else:  # gear or consumable dictionary
+        return random.randint(50, 150)
+
