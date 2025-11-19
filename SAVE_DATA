@@ -1,5 +1,5 @@
 {
-    "gold": 133,
+    "gold": 339,
     "items": {
         "potions": {},
         "gear": [
@@ -12,13 +12,13 @@
         ]
     },
     "player_status": {
-        "hp": 12,
+        "hp": 23,
         "luck": 0.1,
         "equipped_weapon": {
             "name": "Iron Sword",
             "type": "weapon",
             "maxDurability": 10,
-            "currentDurability": 9
+            "currentDurability": 8
         }
     },
     "player_name": "Sand"
