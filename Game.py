@@ -8,12 +8,13 @@ MAX_HP = 30
 player_status = {"hp": MAX_HP, "luck": 0.1}
 
 
-def save_game(filename, gold, items, player_status, player_name):
+def save_game(filename, gold, items, player_status, player_name, map_state):
     save_data = {
         "gold": gold,
         "items": items,
         "player_status": player_status,
-        "player_name": player_name
+        "player_name": player_name,
+        "map_state": map_state
     }
     with open(filename, "w") as f:
         json.dump(save_data, f, indent=4)
@@ -23,91 +24,141 @@ def save_game(filename, gold, items, player_status, player_name):
 def load_game(filename):
     with open(filename, "r") as f:
         save_data = json.load(f)
-    return (save_data["gold"], save_data["items"],
-            save_data["player_status"], save_data["player_name"],
-            save_data.get("map_state", {}))
+    return (
+        save_data["gold"],
+        save_data["items"],
+        save_data["player_status"],
+        save_data["player_name"],
+        save_data.get("map_state", {}),
+    )
 
 
 def run_map(map_state):
     """
-    Runs the map exploration using pygame. Player can move on a 10x10 grid.
-    Town tile is green, monster tile is red. Moving to the monster triggers a fight.
-    Moving back to the town tile after moving returns to town menu.
+    Runs the map exploration using pygame with persistent monsters.
+    Player moves with arrow keys. Town tile is green. Monsters are color-coded:
+    Goblin=green, Vulture=yellow, Troll=dark green.
+    Returns (action:str, updated_map_state:dict)
     """
     pygame.init()
-    screen = pygame.display.set_mode((320, 320))
+    TILE_SIZE = 32
+    GRID_SIZE = 10
+    SCREEN_SIZE = GRID_SIZE * TILE_SIZE
+    screen = pygame.display.set_mode((SCREEN_SIZE, SCREEN_SIZE))
     pygame.display.set_caption("Adventure Map")
     clock = pygame.time.Clock()
 
-    player_x, player_y = map_state.get("player_pos", [0, 0])
-    monster_pos = map_state.get("monster_pos", [random.randint(0, 9), random.randint(0, 9)])
-    town_pos = [0, 0]
+    if "player_pos" not in map_state:
+        map_state["player_pos"] = [0, 0]
+    if "town_pos" not in map_state:
+        map_state["town_pos"] = [0, 0]
+    if "monsters" not in map_state:
+        monsters = []
+        while len(monsters) < 2:
+            m = gamefunctions.new_random_monster()
+            x, y = random.randint(0, 9), random.randint(0, 9)
+            if [x, y] != map_state["player_pos"] and [x, y] != map_state["town_pos"]:
+                m["pos"] = [x, y]
+                m["alive"] = True
+                monsters.append(m)
+        map_state["monsters"] = monsters
 
-    # Ensure monster does not spawn on town tile
-    if monster_pos == town_pos:
-        while monster_pos == town_pos:
-            monster_pos = [random.randint(0, 9), random.randint(0, 9)]
+    player_pos = map_state["player_pos"]
+    town_pos = map_state["town_pos"]
+    monsters = map_state["monsters"]
 
     running = True
-    moved = False
-    action = "none"
+    move_counter = 0
+    action = None
 
     while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                action = "quit"
-                running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP and player_y > 0:
-                    player_y -= 1
-                    moved = True
-                elif event.key == pygame.K_DOWN and player_y < 9:
-                    player_y += 1
-                    moved = True
-                elif event.key == pygame.K_LEFT and player_x > 0:
-                    player_x -= 1
-                    moved = True
-                elif event.key == pygame.K_RIGHT and player_x < 9:
-                    player_x += 1
-                    moved = True
-
-        # Draw map
         screen.fill((0, 0, 0))
-        for i in range(10):
-            for j in range(10):
-                rect = pygame.Rect(i*32, j*32, 32, 32)
-                pygame.draw.rect(screen, (255, 255, 255), rect, 1)
 
-        pygame.draw.circle(screen, (0, 255, 0), (town_pos[0]*32+16, town_pos[1]*32+16), 10)
-        pygame.draw.circle(screen, (255, 0, 0), (monster_pos[0]*32+16, monster_pos[1]*32+16), 10)
-        pygame.draw.rect(screen, (0, 0, 255), pygame.Rect(player_x*32, player_y*32, 32, 32))
+        for x in range(GRID_SIZE):
+            for y in range(GRID_SIZE):
+                rect = pygame.Rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+                pygame.draw.rect(screen, (50, 50, 50), rect, 1)
+
+        pygame.draw.circle(
+            screen,
+            (0, 255, 0),
+            (town_pos[0] * TILE_SIZE + TILE_SIZE // 2, town_pos[1] * TILE_SIZE + TILE_SIZE // 2),
+            TILE_SIZE // 2 - 2,
+        )
+
+        for m in monsters:
+            if m["alive"]:
+                color = (0, 255, 0) if m["name"] == "Goblin" else (255, 255, 0) if m["name"] == "Vulture" else (0, 100, 0)
+                pygame.draw.circle(
+                    screen,
+                    color,
+                    (m["pos"][0] * TILE_SIZE + TILE_SIZE // 2, m["pos"][1] * TILE_SIZE + TILE_SIZE // 2),
+                    TILE_SIZE // 2 - 2,
+                )
+
+        pygame.draw.rect(
+            screen,
+            (0, 0, 255),
+            pygame.Rect(player_pos[0] * TILE_SIZE, player_pos[1] * TILE_SIZE, TILE_SIZE, TILE_SIZE),
+        )
 
         pygame.display.flip()
         clock.tick(10)
 
-        player_pos = [player_x, player_y]
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                return "quit", map_state
+            elif event.type == pygame.KEYDOWN:
+                moved = False
+                if event.key == pygame.K_UP and player_pos[1] > 0:
+                    player_pos[1] -= 1
+                    moved = True
+                elif event.key == pygame.K_DOWN and player_pos[1] < GRID_SIZE - 1:
+                    player_pos[1] += 1
+                    moved = True
+                elif event.key == pygame.K_LEFT and player_pos[0] > 0:
+                    player_pos[0] -= 1
+                    moved = True
+                elif event.key == pygame.K_RIGHT and player_pos[0] < GRID_SIZE - 1:
+                    player_pos[0] += 1
+                    moved = True
 
-        if moved:
-            if player_pos == monster_pos:
-                action = "fight"
-                running = False
-            elif player_pos == town_pos:
-                action = "town"
-                running = False
+                if moved:
+                    move_counter += 1
+                    for m in monsters:
+                        if m["alive"] and player_pos == m["pos"]:
+                            action = "fight"
+                            running = False
+                            break
 
-    pygame.quit()
-    map_state["player_pos"] = [player_x, player_y]
-    map_state["monster_pos"] = monster_pos
+                    if player_pos == town_pos:
+                        action = "town"
+                        running = False
+
+                    if move_counter % 3 == 0:
+                        for m in monsters:
+                            if not m["alive"]:
+                                continue
+                            directions = [[0,1],[0,-1],[1,0],[-1,0]]
+                            dx, dy = random.choice(directions)
+                            new_x = max(0, min(9, m["pos"][0]+dx))
+                            new_y = max(0, min(9, m["pos"][1]+dy))
+                            if [new_x, new_y] != player_pos and [new_x, new_y] != town_pos and all([new_x,new_y] != mm["pos"] for mm in monsters if mm != m and mm["alive"]):
+                                m["pos"] = [new_x, new_y]
+
+    map_state["player_pos"] = player_pos
+    map_state["monsters"] = monsters
     return action, map_state
 
 
-def monster_fight(monster, items):
-    monster_hp = monster["health"]
+def monster_fight(monster_dict, items):
+    monster_hp = monster_dict["health"]
     player_status.setdefault("equipped_weapon", None)
 
-    print(f"\n⚔️  A wild {monster['name']} appears!")
-    print(monster['description'])
-    print(f"HP: {monster_hp}, Power: {monster['power']}, Gold: {monster['money']}")
+    print(f"\n⚔️  A wild {monster_dict['name']} appears!")
+    print(monster_dict['description'])
+    print(f"HP: {monster_hp}, Power: {monster_dict['power']}, Gold: {monster_dict['money']}")
 
     while monster_hp > 0 and player_status["hp"] > 0:
         print(f"\nYour HP: {player_status['hp']}, Monster HP: {monster_hp}")
@@ -141,7 +192,7 @@ def monster_fight(monster, items):
             monster_hp = max(monster_hp, 0)
             print(f"You dealt {damage} damage.")
 
-            monster_damage = monster["power"]
+            monster_damage = monster_dict["power"]
             if "Defense Potion" in items["potions"] and items["potions"]["Defense Potion"] > 0:
                 monster_damage = max(monster_damage - 5, 0)
                 items["potions"]["Defense Potion"] -= 1
@@ -154,11 +205,9 @@ def monster_fight(monster, items):
             print("\nYour potions:")
             for name, qty in items["potions"].items():
                 print(f"{name}: {qty}")
-
             print("\nYour gear/consumables:")
             for i, g in enumerate(items["gear"]):
                 print(f"{i+1}) {g['name']} ({g['type']})")
-
             item_choice = input("Which item to use/equip? ").strip()
             if item_choice in items["potions"] and items["potions"][item_choice] > 0:
                 if item_choice == "Health Potion":
@@ -197,23 +246,21 @@ def monster_fight(monster, items):
             print("\nYour HP has reached 0. Game Over.")
             return 0
 
-    print(f"\nYou defeated {monster['name']} and collected {monster['money']} gold!")
-    return monster["money"]
+    print(f"\nYou defeated {monster_dict['name']} and collected {monster_dict['money']} gold!")
+    return monster_dict["money"]
 
 
 def town_menu(gold, items, player_name, map_state):
-    """
-    Handles town menu actions. Opens map exploration and persists map state.
-    """
     while True:
         print(f"\nYou are in town. HP: {player_status['hp']}, Gold: {gold}")
+        print("="*40)
         print("1) Leave town (Explore Map)")
         print("2) Sleep (Restore HP for 5 Gold)")
         print("3) Visit Shop")
         print("4) Save and Quit")
         print("5) Quit without saving")
+        print("="*40)
         choice = input("Choose an action: ").strip()
-
         if choice == "1":
             action, map_state = run_map(map_state)
             if action == "town":
@@ -230,10 +277,10 @@ def town_menu(gold, items, player_name, map_state):
             else:
                 print("Not enough gold to sleep!")
         elif choice == "3":
-            gold, items = visit_shop(gold, items)
+            gold, items = gamefunctions.visit_shop(gold, items)
         elif choice == "4":
             filename = input("Enter a filename to save your game: ").strip()
-            save_game(filename, gold, items, player_status, player_name)
+            save_game(filename, gold, items, player_status, player_name, map_state)
             print("Thanks for playing!")
             exit()
         elif choice == "5":
@@ -243,79 +290,9 @@ def town_menu(gold, items, player_name, map_state):
             print("Invalid input. Try again.")
 
 
-def visit_shop(gold, items):
-    """
-    Handles shop interaction with random items.
-    """
-    potions = [
-        ("Health Potion", (40, 60)),
-        ("MP Potion", (30, 50)),
-        ("Strength Potion", (100, 130)),
-        ("Defense Potion", (90, 120)),
-        ("Cloaking Potion", (80, 100)),
-        ("Speed Potion", (70, 90))
-    ]
-
-    gear_and_consumables = [
-        {"name": "Iron Sword", "type": "weapon", "maxDurability": 10, "currentDurability": 10},
-        {"name": "Magic Gem", "type": "consumable", "note": "Defeats a monster automatically"}
-    ]
-
-    all_items = potions + gear_and_consumables * 3
-    item1, item2 = random.sample(all_items, 2)
-
-    def get_price(item):
-        if isinstance(item, tuple):
-            return round(random.uniform(*item[1]))
-        else:
-            return random.randint(50, 150)
-
-    item1_price = get_price(item1)
-    item2_price = get_price(item2)
-    name1 = item1[0] if isinstance(item1, tuple) else item1["name"]
-    name2 = item2[0] if isinstance(item2, tuple) else item2["name"]
-    gamefunctions.print_shop_menu(name1, item1_price, name2, item2_price)
-
-    print(f"\nYou have {gold} gold.")
-    choice = input(f"Which item to buy? ({name1} or {name2} or 'none'): ").strip().lower()
-    if choice == "none":
-        return gold, items
-
-    quantity = 1
-    if isinstance(item1, tuple) or isinstance(item2, tuple):
-        try:
-            quantity = int(input("How many? "))
-        except ValueError:
-            quantity = 1
-
-    if choice == name1.lower():
-        selected_item = item1
-        price = item1_price
-        selected_name = name1
-    elif choice == name2.lower():
-        selected_item = item2
-        price = item2_price
-        selected_name = name2
-    else:
-        print("Item not available.")
-        return gold, items
-
-    bought, gold = gamefunctions.purchase_item(price, gold, quantity)
-
-    if isinstance(selected_item, tuple):
-        items["potions"][selected_name] = items["potions"].get(selected_name, 0) + bought
-    else:
-        for _ in range(bought):
-            items["gear"].append(selected_item.copy())
-
-    print(f"Bought {bought} {selected_name}(s). Gold left: {gold}")
-    return gold, items
-
-
 def main():
     print("Welcome to the Adventure Game!")
     choice = input("Start a New Game (N) or Load Game (L)? ").strip().upper()
-
     if choice == "L":
         filename = input("Enter save filename: ").strip()
         if os.path.exists(filename):
@@ -342,11 +319,22 @@ def main():
     while True:
         gold, items, player_name, map_state, action = town_menu(gold, items, player_name, map_state)
         if action == "fight":
-            monster = gamefunctions.new_random_monster()
-            loot = monster_fight(monster, items)
-            if player_status["hp"] <= 0:
-                break
-            gold += loot
+            monsters_alive = [m for m in map_state["monsters"] if m["alive"] and m["pos"] == map_state["player_pos"]]
+            if monsters_alive:
+                m = monsters_alive[0]
+                loot = monster_fight(m, items)
+                if player_status["hp"] <= 0:
+                    break
+                gold += loot
+                m["alive"] = False
+                new_monster = gamefunctions.new_random_monster()
+                while True:
+                    x, y = random.randint(0, 9), random.randint(0, 9)
+                    if [x, y] != map_state["player_pos"] and [x, y] != map_state["town_pos"] and all([x, y] != mm["pos"] for mm in map_state["monsters"] if mm["alive"]):
+                        new_monster["pos"] = [x, y]
+                        new_monster["alive"] = True
+                        map_state["monsters"].append(new_monster)
+                        break
 
 
 if __name__ == "__main__":
